@@ -1,0 +1,58 @@
+rapor_hafta1.md
+rapor_hafta2.md
+rapor_katilimci1_23_11_2025.md
+rapor_katilimci1_30_11_2025.md
+rapor_katilimci1.md
+rapor_katilimci2.md
+rapor_katilimci3.md
+rapor_katilimci4.md
+secure_coding_report.md
+
+
+# =========================
+# Node modules
+# =========================
+node_modules/
+backend/node_modules/
+mobile/node_modules/
+
+# =========================
+# Build / output folders
+# =========================
+backend/target/
+mobile/android/build/
+mobile/ios/build/
+mobile/.expo/
+
+# =========================
+# Log dosyaları
+# =========================
+*.log
+
+# =========================
+# IDE / editör dosyaları
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# =========================
+# OS dosyaları
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Hassas / konfigürasyon dosyaları
+# =========================
+.env
+
+# =========================
+# Backend spesifik
+# =========================
+backend/db.js
+
+
+
+
+
