@@ -1,6 +1,6 @@
 # UltimateApp 🚀
 
-**UltimateApp**, finans, yemek siparişi ve ulaşım çözümlerini tek bir çatı altında toplayan modern bir "Super App" projesidir. React Native (Expo) ve Node.js teknolojileri kullanılarak geliştirilmiştir.
+**UltimateApp**, finans, yemek siparişi, mesajlaşma ve ulaşım çözümlerini tek bir çatı altında toplayan modern bir "Super App" projesidir. React Native (Expo) ve Node.js teknolojileri kullanılarak geliştirilmiştir.
 
 ## 📱 Özellikler
 
@@ -18,6 +18,11 @@
 ### 🚗 Ulaşım (Ride)
 *   **Yolculuk:** Konum bazlı araç çağırma arayüzü (Simülasyon).
 *   **Geçmiş:** Yapılan yolculukların kaydı.
+
+### 💬 Mesajlaşma
+*   **Gerçek Zamanlı Sohbet:** WebSocket altyapısı ile anlık mesajlaşma.
+*   **Kullanıcı Bazlı Chat:** Kullanıcı listesi üzerinden birebir sohbet.
+*   **Mesaj Geçmişi:** Önceki mesajların otomatik yüklenmesi.
 
 ### 👤 Profil
 *   Kullanıcı bilgileri güncelleme.

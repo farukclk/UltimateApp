@@ -2,10 +2,15 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
+const http = require('http');
 const bcrypt = require('bcrypt');
+const WebSocket = require('ws');
 const db = require('./db'); // Veritabanı bağlantı modülümüz
+const { create } = require('domain');
 
 const app = express();
+app.use(cors());
+app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 const JWT_SECRET = 'your_super_secret_key_that_is_long_and_secure';
@@ -84,7 +89,7 @@ app.post('/login', async (req, res) => {
         if (passwordMatch) {
             // Şifre doğru, token oluştur
             const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
-            res.status(200).json({ message: 'Login successful!', token: token });
+            res.status(200).json({ message: 'Login successful!', token: token , id: user.id});
         } else {
             // Şifre yanlış
             res.status(401).json({ message: 'Invalid credentials.' });
@@ -674,8 +679,94 @@ app.get('/', (req, res) => {
 });
 
 
-// Sunucuyu başlat
-app.listen(PORT, HOST, () => {
-    console.log(`Server is running on http://${HOST}:${PORT}`);
-    console.log('PostgreSQL database integration is active.');
+
+
+app.use('/api', require('./routes/messages')); 
+
+
+// 3️⃣ HTTP server oluştur
+const server = http.createServer(app);
+
+// 4️⃣ WebSocket server
+const wss = new WebSocket.Server({ server });
+
+const targetWs = [];
+
+
+wss.on('connection', (ws, req) => {
+    console.log("new connn");
+    const token = new URL(req.url, `http://${HOST}`).searchParams.get('token');
+    console.log('✅ Yeni client bağlandı: ');
+
+    
+    let myId;
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        myId = decoded.userId; // token içinde userId varsa
+        targetWs[myId] = ws;
+    }
+    catch (e) {}
+       
+    
+
+    ws.on('message', async (msg) => {
+        console.log( JSON.parse(msg));
+        try {
+            const data = JSON.parse(msg);
+            const token = data.token;
+            const to = data.to; 
+
+            if (token == null) return;
+            jwt.verify(token, JWT_SECRET, (err, user) => {
+                if (err) return; // Forbidden
+            });
+
+
+            
+            const decoded = jwt.verify(token, JWT_SECRET);
+            const senderId = decoded.userId; // token içinde userId varsa
+            console.log('Mesaj gönderen userId:', senderId);
+            
+ 
+        
+
+            // hedefe bildirim yolla
+            const targetSocket = targetWs[to];
+            if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
+                targetSocket.send(JSON.stringify({
+                    from: senderId,
+                    text: data.text,
+                    //created_at: new Date().toISOString().replace('T', ' ').replace('Z', '') 
+                    created_ad: data.created_at
+                }));
+                console.log(`Mesaj ${to} kullanıcısına gönderildi.`);
+            } 
+            else {
+                console.log(`❌ Hedef kullanıcı (${to}) bağlı değil.`);
+            }
+
+            // db ye kaydet
+            const sql = 'INSERT INTO MESSAGES(SENDER_ID, RECEIVER_ID, CONTENT) VALUES($1, $2, $3)'
+            const values = [senderId, to, data.text];
+            const dbRes = await db.query(sql, values);
+            console.log("db ye kaydedildi mesaj");
+        
+
+        } catch (e) {
+            console.log("error");
+        console.error(e);
+        }
+    });
+
+    ws.on('close', () => {
+        console.log('❌ Client disconnected:', myId);
+        delete targetWs[myId];
+    });
 });
+
+
+
+server.listen(PORT, () => {
+    console.log(`🚀 Server ${PORT} portunda hazır.`);
+});
+

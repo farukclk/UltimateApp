@@ -39,3 +39,23 @@ CREATE TABLE rides (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+
+
+
+
+
+-- Mesajlar tablosu
+CREATE TABLE messages (
+  id SERIAL PRIMARY KEY,
+  sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  status VARCHAR(20) DEFAULT 'sent',
+  created_at TIMESTAMP DEFAULT NOW(),
+  read_at TIMESTAMP
+);
+
+-- Index'ler
+CREATE INDEX idx_sender_receiver ON messages(sender_id, receiver_id);
+CREATE INDEX idx_created_at ON messages(created_at DESC);

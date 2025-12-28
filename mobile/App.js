@@ -1,5 +1,7 @@
+import { useNavigation } from '@react-navigation/native';
+import io from 'socket.io-client';
 import { registerRootComponent } from 'expo';
-import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,6 +18,7 @@ import {
   Modal,
   RefreshControl,
   Dimensions,
+  Button
 } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -26,7 +29,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 const { width, height } = Dimensions.get('window');
 
 // --- Configuration & Constants ---
-const API_URL = 'http://192.168.0.2:3000';
+const API_URL = 'http://192.168.0.13:3000';
+const WS_URL = 'ws://192.168.0.13:3000';
+const socket = io(API_URL, {
+  transports: ['websocket'],
+  autoConnect: false,
+});;
+
+let MY_USER_ID;
 
 // 🎨 Güzel & Sıcak Renk Paleti
 const COLORS = {
@@ -89,6 +99,7 @@ const AuthProvider = ({ children }) => {
       const data = await response.json();
       if (response.ok && data.token) {
         setAuthState({ token: data.token, isLoading: false });
+        MY_USER_ID = data.id;
         return { success: true };
       } else {
         Alert.alert('Giriş Başarısız', data.message || 'Hatalı Şifre!');
@@ -1074,6 +1085,323 @@ const ProfileScreen = () => {
   );
 };
 
+
+
+// ============================================
+// MESSAGE SCREEN - WhatsApp Style User List
+// ============================================
+const MessageScreen = () => {
+  const { userId, token } = useContext(AuthContext);
+  const api = useApi();
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState('');
+  const [socket, setSocket] = useState(null);
+  const flatListRef = useRef(null);
+
+  // Kullanıcıları çek
+  useEffect(() => {
+    api('/api/users').then(setUsers);
+  }, []);
+
+  // Cleanup - component unmount
+  useEffect(() => {
+    return () => {
+      if (socket) {
+        socket.close();
+      }
+    };
+  }, [socket]);
+
+  // Chat aç
+  const openChat = async (user) => {
+    // Eski socket'i kapat
+    if (socket) {
+      socket.close();
+    }
+    setSelectedUser(user);
+    // Geçmiş mesajları yükle
+    const oldMessages = await api(`/api/messages/${user.id}`);
+    setMessages(oldMessages);
+    // WebSocket aç
+    const ws = new WebSocket(`ws://192.168.0.13:3000/?token=${token}`);
+    ws.onopen = () => console.log('✅ WebSocket connected');
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      // Açık chat'e ait mesajları filtrele
+      if ((msg.from === user.id && msg.to === userId) || 
+          (msg.from === userId && msg.to === user.id)) {
+        // created_at yoksa şu anki zamanı ekle
+        if (!msg.created_at) {
+          msg.created_at = new Date().toISOString();
+        }
+        setMessages(prev => [...prev, msg]);
+      }
+    };
+    ws.onclose = () => console.log('❌ WebSocket disconnected');
+    setSocket(ws);
+  };
+
+  // Mesaj gönder
+  const sendMessage = () => {
+    if (!text.trim() || !socket || !selectedUser) return;
+    const payload = {
+      to: selectedUser.id,
+      token,
+      text
+    };
+    socket.send(JSON.stringify(payload));
+    // Mesajı hemen ekle
+    setMessages(prev => [...prev, { 
+      from: MY_USER_ID, 
+      to: selectedUser.id, 
+      text,
+      created_at: new Date().toISOString() // Saat bilgisini ekle
+    }]);
+    setText('');
+    
+    // Alta scroll
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
+  // Geri dön
+  const goBack = () => {
+    if (socket) {
+      socket.close();
+    }
+    setSelectedUser(null);
+    setMessages([]);
+    setText('');
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: COLORS.background }}>
+      {!selectedUser ? (
+        <View style={{ flex: 1, padding: 10 }}>
+          <Text style={{ 
+            fontSize: 28, 
+            fontWeight: 'bold', 
+            marginBottom: 20, 
+            paddingHorizontal: 10,
+            color: COLORS.text
+          }}>
+            Mesajlar
+          </Text>
+          {users.map(u => (
+            <TouchableOpacity 
+              key={u.id} 
+              onPress={() => openChat(u)}
+              style={{
+                backgroundColor: COLORS.card,
+                padding: 16,
+                marginBottom: 10,
+                borderRadius: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                borderWidth: 1,
+                borderColor: COLORS.border
+              }}
+            >
+              <View style={{
+                width: 54,
+                height: 54,
+                borderRadius: 27,
+                backgroundColor: COLORS.primary,
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginRight: 14
+              }}>
+                <Text style={{ 
+                  color: COLORS.text, 
+                  fontSize: 22, 
+                  fontWeight: 'bold' 
+                }}>
+                  {u.username.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <Text style={{ 
+                fontSize: 17, 
+                fontWeight: '600',
+                color: COLORS.text
+              }}>
+                {u.username}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <View style={{ flex: 1 }}>
+          {/* Header */}
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: 14,
+            backgroundColor: COLORS.backgroundLight,
+            borderBottomWidth: 1,
+            borderBottomColor: COLORS.border
+          }}>
+            <TouchableOpacity 
+              onPress={goBack} 
+              style={{ 
+                marginRight: 14,
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: COLORS.surface,
+                justifyContent: 'center',
+                alignItems: 'center'
+              }}
+            >
+              <Text style={{ fontSize: 20, color: COLORS.text }}>←</Text>
+            </TouchableOpacity>
+            <View style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: COLORS.primary,
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginRight: 12
+            }}>
+              <Text style={{ 
+                color: COLORS.text, 
+                fontSize: 19, 
+                fontWeight: 'bold' 
+              }}>
+                {selectedUser.username.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <Text style={{ 
+              fontSize: 19, 
+              fontWeight: '600',
+              color: COLORS.text
+            }}>
+              {selectedUser.username}
+            </Text>
+          </View>
+
+          {/* Mesajlar */}
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item, i) => i.toString()}
+            contentContainerStyle={{ padding: 12 }}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            renderItem={({ item }) => {
+              const isMyMessage = Number(item.from) === Number(MY_USER_ID);
+              
+              // Saat ve dakika formatla
+              const formatTime = (timestamp) => {
+                if (!timestamp) return '';
+                try {
+                  const date = new Date(timestamp);
+                  const hours = date.getHours().toString().padStart(2, '0');
+                  const minutes = date.getMinutes().toString().padStart(2, '0');
+                  return `${hours}:${minutes}`;
+                } catch (e) {
+                  return '';
+                }
+              };
+              
+              return (
+                <View style={{
+                  flexDirection: 'row',
+                  justifyContent: isMyMessage ? 'flex-end' : 'flex-start',
+                  marginBottom: 10
+                }}>
+                  <View style={{
+                    maxWidth: '75%',
+                    backgroundColor: isMyMessage ? COLORS.primary : COLORS.card,
+                    padding: 13,
+                    paddingBottom: 8,
+                    borderRadius: 18,
+                    borderBottomRightRadius: isMyMessage ? 4 : 18,
+                    borderBottomLeftRadius: isMyMessage ? 18 : 4,
+                    borderWidth: 1,
+                    borderColor: isMyMessage ? 'transparent' : COLORS.border
+                  }}>
+                    <Text style={{ 
+                      color: COLORS.text,
+                      fontSize: 15,
+                      lineHeight: 20,
+                      marginBottom: 4
+                    }}>
+                      {item.text}
+                    </Text>
+                    <Text style={{
+                      color: isMyMessage ? 'rgba(255, 255, 255, 0.7)' : COLORS.textMuted,
+                      fontSize: 11,
+                      alignSelf: 'flex-end'
+                    }}>
+                      {formatTime(item.created_at)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }}
+          />
+
+          {/* Input Area */}
+          <View style={{
+            flexDirection: 'row',
+            padding: 12,
+            backgroundColor: COLORS.backgroundLight,
+            borderTopWidth: 1,
+            borderTopColor: COLORS.border,
+            alignItems: 'center'
+          }}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              onSubmitEditing={sendMessage}
+              placeholder="Mesaj yaz..."
+              placeholderTextColor={COLORS.textMuted}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              style={{
+                flex: 1,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                padding: 12,
+                borderRadius: 22,
+                marginRight: 10,
+                backgroundColor: COLORS.surface,
+                fontSize: 15,
+                color: COLORS.text
+              }}
+            />
+            <TouchableOpacity
+              onPress={sendMessage}
+              style={{
+                backgroundColor: COLORS.primary,
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                justifyContent: 'center',
+                alignItems: 'center'
+              }}
+            >
+              <Text style={{ 
+                color: COLORS.text, 
+                fontSize: 20, 
+                fontWeight: 'bold' 
+              }}>
+                →
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+};
+
+
+
+
 // ============================================
 // NAVIGATION
 // ============================================
@@ -1098,6 +1426,7 @@ const MainNavigator = () => (
         if (route.name === 'Cüzdan') iconName = focused ? 'wallet' : 'wallet-outline';
         else if (route.name === 'Yemek') iconName = focused ? 'restaurant' : 'restaurant-outline';
         else if (route.name === 'Ride') iconName = focused ? 'car-sport' : 'car-sport-outline';
+        else if (route.name === 'Mesajlar') iconName = focused ? 'paper-plane' : 'paper-plane-outline';
         else if (route.name === 'Profil') iconName = focused ? 'person' : 'person-outline';
         return <Ionicons name={iconName} size={24} color={color} />;
       },
@@ -1106,6 +1435,7 @@ const MainNavigator = () => (
     <Tab.Screen name="Cüzdan" component={WalletScreen} />
     <Tab.Screen name="Yemek" component={FoodScreen} />
     <Tab.Screen name="Ride" component={RideScreen} />
+    <Tab.Screen name="Mesajlar" component={MessageScreen} />
     <Tab.Screen name="Profil" component={ProfileScreen} />
   </Tab.Navigator>
 );
