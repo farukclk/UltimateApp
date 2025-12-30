@@ -29,8 +29,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 const { width, height } = Dimensions.get('window');
 
 // --- Configuration & Constants ---
-const API_URL = 'http://192.168.0.13:3000';
-const WS_URL = 'ws://192.168.0.13:3000';
+const API_URL = 'http://localhost:3000';
+const WS_URL = 'ws://localhost:3000';
 const socket = io(API_URL, {
   transports: ['websocket'],
   autoConnect: false,
@@ -1125,7 +1125,7 @@ const MessageScreen = () => {
     const oldMessages = await api(`/api/messages/${user.id}`);
     setMessages(oldMessages);
     // WebSocket aç
-    const ws = new WebSocket(`ws://192.168.0.13:3000/?token=${token}`);
+    const ws = new WebSocket(`${WS_URL}/?token=${token}`);
     ws.onopen = () => console.log('✅ WebSocket connected');
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
